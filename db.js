@@ -485,12 +485,52 @@ function validateBackup(payload) {
   };
 }
 
+function toNum(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Числовые поля из импортированного файла приводим к числам, enum'ы — к белому
+// списку: иначе подделанный бэкап мог бы пронести строки с разметкой в innerHTML.
+function sanitizeBackupData(data) {
+  return {
+    sessions: data.sessions.map((s) => ({
+      ...s,
+      id: toNum(s.id),
+      completed: Boolean(s.completed),
+    })),
+    setLogs: data.setLogs.map((s) => ({
+      ...s,
+      id: toNum(s.id),
+      sessionId: toNum(s.sessionId),
+      setNumber: toNum(s.setNumber),
+      weight: toNum(s.weight),
+      reps: toNum(s.reps),
+      pain: Boolean(s.pain),
+      technique: s.technique === "cheating" ? "cheating" : "clean",
+    })),
+    workingBases: data.workingBases.map((b) => ({
+      ...b,
+      weight: toNum(b.weight),
+      sessionsConfirmed: toNum(b.sessionsConfirmed),
+      status: ["probe", "working", "confirmed"].includes(b.status) ? b.status : "working",
+    })),
+    bodyMeasurements: data.bodyMeasurements.map((m) => {
+      const item = { ...m, id: toNum(m.id) };
+      ["height", "bodyWeight", "arm", "chest", "waist"].forEach((key) => {
+        if (item[key] !== undefined) item[key] = toNum(item[key]);
+      });
+      return item;
+    }),
+  };
+}
+
 // Полная замена данных (не merge: слияние с autoIncrement-id перекрёстно
 // сшивает подходы с чужими тренировками). Вызывать только после validateBackup.
 async function importAllData(payload) {
   const check = validateBackup(payload);
   if (!check.ok) throw new Error(check.error);
-  const data = payload.data;
+  const data = { ...payload.data, ...sanitizeBackupData(payload.data) };
 
   if (useLocalStore) {
     writeLocalStore("sessions", data.sessions);

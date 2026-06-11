@@ -614,7 +614,7 @@ async function deleteMeasurement(id) {
 }
 
 function formatMeasure(value, unit) {
-  return value ? `${value} ${unit}` : "—";
+  return value ? `${Number(value)} ${unit}` : "—";
 }
 
 function formatDelta(current, previous, unit) {
@@ -984,7 +984,7 @@ async function renderExercise() {
           <span class="status ${base.status === "confirmed" ? "good" : base.status === "working" ? "work" : "warn"}">
             ${STATUS_LABELS[base.status]}
           </span>
-          <span class="muted"> · текущая база: ${base.weight} кг</span>
+          <span class="muted"> · текущая база: ${Number(base.weight)} кг</span>
           ${base.status === "confirmed" ? `<span class="next-step">→ можно +${formatWeightStep(getWeightStep(tmpl))} кг</span>` : ""}
         </div>` : ""}
         <p class="muted technique-note">${esc(tmpl.techniqueNotes)}</p>
@@ -1091,7 +1091,7 @@ function renderSetRow(set) {
   return `
     <div class="set-row">
       <div>
-        <strong>#${set.setNumber} · ${set.weight} кг × ${set.reps}</strong>
+        <strong>#${Number(set.setNumber)} · ${Number(set.weight)} кг × ${Number(set.reps)}</strong>
         <p class="muted">${set.technique === "clean" ? "✓ чисто" : "читинг"} · боль: ${set.pain ? "⚠ есть" : "нет"}</p>
       </div>
       <span class="status ${set.pain ? "warn" : "good"}">${set.pain ? "стоп" : "ок"}</span>
@@ -1547,7 +1547,7 @@ function renderMeasurementPanel(measurements) {
             <strong>${formatDate(item.date)}</strong>
             <p class="muted">${renderMeasurementLine(item)}</p>
           </div>
-          <button class="mini-danger" data-action="delete-measure" data-id="${item.id}">Удалить</button>
+          <button class="mini-danger" data-action="delete-measure" data-id="${Number(item.id)}">Удалить</button>
         </div>`).join("")}
     </article>` : ""}`;
 }
@@ -1587,10 +1587,10 @@ function renderMeasurementSummary(latest, previous) {
 
 function renderMeasurementLine(item) {
   return [
-    item.bodyWeight ? `${item.bodyWeight} кг` : "",
-    item.arm ? `руки ${item.arm}` : "",
-    item.chest ? `грудь ${item.chest}` : "",
-    item.waist ? `талия ${item.waist}` : "",
+    item.bodyWeight ? `${Number(item.bodyWeight)} кг` : "",
+    item.arm ? `руки ${Number(item.arm)}` : "",
+    item.chest ? `грудь ${Number(item.chest)}` : "",
+    item.waist ? `талия ${Number(item.waist)}` : "",
   ].filter(Boolean).join(" · ");
 }
 
@@ -1606,7 +1606,7 @@ function renderProgressCard(tmpl, base) {
       <div class="metric-row">
         <div>
           <h3>${esc(tmpl.name)}</h3>
-          <p class="muted">${base?.weight ? `${base.weight} кг` : "нет данных"} · пик: ${tmpl.peakWeight ? `${tmpl.peakWeight} кг` : "—"}</p>
+          <p class="muted">${base?.weight ? `${Number(base.weight)} кг` : "нет данных"} · пик: ${tmpl.peakWeight ? `${tmpl.peakWeight} кг` : "—"}</p>
         </div>
         <span class="status ${cls}">${status}</span>
       </div>

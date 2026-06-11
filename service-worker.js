@@ -1,4 +1,4 @@
-const CACHE_NAME = "strength-program-v8";
+const CACHE_NAME = "strength-program-v9";
 const NETWORK_TIMEOUT_MS = 3000;
 const ASSETS = [
   "./",
