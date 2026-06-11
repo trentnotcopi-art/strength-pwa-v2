@@ -108,6 +108,7 @@ document.addEventListener("click", async (e) => {
   const { action: name } = action.dataset;
 
   if (name === "choose-day")      chooseDay(action.dataset.day);
+  if (name === "continue-workout") await continueWorkout(Number(action.dataset.id));
   if (name === "set-wellbeing")   setState("wellbeing", action.dataset.value);
   if (name === "start-session")   await startSession();
   if (name === "open-exercise")   openExercise(action.dataset.id);
@@ -196,9 +197,32 @@ function toggleLegs() {
 }
 
 // ─── Сессии ──────────────────────────────────────────────────────────────────
+function isToday(value) {
+  const d = new Date(value);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+}
+
 async function startSession() {
-  const session = await store.createSession(state.selectedDay, state.wellbeing);
-  state.activeSession   = session;
+  // Если сегодня уже есть незавершённый черновик этого же дня — продолжаем его,
+  // а не плодим вторую сессию
+  const sessions = await store.getAllSessions();
+  const draft = sessions.find(
+    (s) => !s.completed && isToday(s.date) && s.dayType === state.selectedDay,
+  );
+  const session = draft || await store.createSession(state.selectedDay, state.wellbeing);
+  state.activeSession = session;
+  await ensurePlannerForSession(session);
+  if (draft) window.exportUtils.showToast("Продолжаем сегодняшнюю тренировку");
+  navigate("workout");
+}
+
+async function continueWorkout(sessionId) {
+  const session = await store.getSession(sessionId);
+  if (!session || session.completed) return;
+  state.activeSession = session;
   await ensurePlannerForSession(session);
   navigate("workout");
 }
@@ -207,15 +231,56 @@ async function finishSession() {
   if (!state.activeSession) return;
   const finishedId = state.activeSession.id;
   await store.completeSession(finishedId);
-  await advancePlannerAfterSession(finishedId);
+  const planner = await advancePlannerAfterSession(finishedId);
   state.activeSession   = null;
   state.activeExerciseId = null;
-  // Экран деталей завершённой тренировки — оттуда можно сразу поделиться отчётом.
+  // Экран-резюме завершённой тренировки — оттуда можно сразу поделиться отчётом.
   // replaceState вместо location.hash, чтобы hashchange не перерисовал экран историей.
   state.route = "history";
   history.replaceState(null, "", "#history");
   setActiveNav();
-  await renderSessionDetails(finishedId);
+  try {
+    await renderFinishSummary(finishedId, planner);
+  } catch (err) {
+    renderError(err);
+  }
+}
+
+async function renderFinishSummary(sessionId, planner) {
+  const session = await store.getSession(sessionId);
+  const sets = await store.getSessionSets(sessionId);
+  const exercisesDone = new Set(sets.map((s) => s.exerciseId)).size;
+  const painCount = sets.filter((s) => s.pain).length;
+  const cleanCount = sets.filter((s) => s.technique === "clean" && !s.pain).length;
+
+  app.innerHTML = `
+    <section class="screen">
+      <article class="card cta-card summary-card">
+        <p class="eyebrow">Готово</p>
+        <h1>Тренировка завершена 💪</h1>
+        <p class="muted">${DAY_NAMES[session.dayType]} · ${formatDate(session.date)}</p>
+        <div class="summary-stats">
+          <div><strong>${sets.length}</strong><span class="label">${plural(sets.length, "подход", "подхода", "подходов")}</span></div>
+          <div><strong>${exercisesDone}</strong><span class="label">${plural(exercisesDone, "упражнение", "упражнения", "упражнений")}</span></div>
+          <div><strong>${cleanCount}</strong><span class="label">чисто</span></div>
+        </div>
+        ${painCount ? `<div class="warn">⚠ Была боль в ${painCount} ${plural(painCount, "подходе", "подходах", "подходах")} — посмотри рекомендации в Отчёте.</div>` : ""}
+        <p class="muted">${esc(planner?.lastAdvice || "")}</p>
+        <button class="primary-btn" data-action="share-session-report" data-id="${session.id}">
+          Поделиться отчётом
+        </button>
+        <button class="secondary-btn" data-action="go-home">Домой</button>
+      </article>
+    </section>`;
+}
+
+function plural(n, one, few, many) {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
 }
 
 function openExercise(exerciseId) {
@@ -258,8 +323,17 @@ async function saveSet() {
   });
 
   await updateWorkingBase(saved);
-  // Подставляем плановые повторы следующего подхода (для дроп-сетов они меняются)
   const tmpl = getTemplate(state.activeExerciseId);
+
+  // Все плановые подходы сделаны — возвращаемся к списку упражнений
+  if (setNumber >= getPlannedSets(tmpl)) {
+    window.exportUtils.showToast(`${tmpl?.name || "Упражнение"}: выполнено ✓`);
+    state.pain = false;
+    navigate("workout");
+    return;
+  }
+
+  // Подставляем плановые повторы следующего подхода (для дроп-сетов они меняются)
   state.reps = Number(tmpl?.planReps?.[setNumber] ?? tmpl?.planReps?.[0] ?? state.reps);
   state.pain = false;
   render();
@@ -432,7 +506,12 @@ function applyPlannerToTemplates(planner) {
     tmpl.currentPlan = planned.text;
     tmpl.planWeights = planned.weights;
     tmpl.planReps = planned.reps;
+    tmpl.planSets = wave.sets;
   });
+}
+
+function getPlannedSets(tmpl) {
+  return Number(tmpl?.planSets) || 3;
 }
 
 function buildExercisePlan(tmpl, wave, cycle, profile = state.profile) {
@@ -584,6 +663,7 @@ async function renderHome() {
   applyPlannerToTemplates(planner);
   const last     = sessions[0];
   const nextDay  = getNextDay(last);
+  const draft    = sessions.find((s) => !s.completed && isToday(s.date));
 
   app.innerHTML = `
     <section class="screen">
@@ -598,12 +678,14 @@ async function renderHome() {
       <article class="card cta-card">
         <div class="metric-row">
           <div>
-            <p class="label">Следующая</p>
-            <h2>${DAY_NAMES[nextDay]}</h2>
+            <p class="label">${draft ? "Не завершена" : "Следующая"}</p>
+            <h2>${DAY_NAMES[draft ? draft.dayType : nextDay]}</h2>
           </div>
-          <span class="status good">уровень 1</span>
+          ${draft ? `<span class="status warn">черновик</span>` : ""}
         </div>
-        <button class="primary-btn" data-action="new-workout">Начать тренировку</button>
+        ${draft
+          ? `<button class="primary-btn" data-action="continue-workout" data-id="${draft.id}">Продолжить тренировку</button>`
+          : `<button class="primary-btn" data-action="new-workout">Начать тренировку</button>`}
       </article>
 
       ${renderProgramPlan(nextDay)}
@@ -795,7 +877,7 @@ async function renderWorkout() {
 
   const available = exercises.filter((e) => !e.blocked);
   const blocked   = exercises.filter((e) => e.blocked);
-  const done      = available.filter((e) => sets.filter((s) => s.exerciseId === e.id).length >= 3);
+  const done      = available.filter((e) => sets.filter((s) => s.exerciseId === e.id).length >= getPlannedSets(e));
   const progress  = available.length ? Math.round((done.length / available.length) * 100) : 0;
 
   app.innerHTML = `
@@ -805,15 +887,15 @@ async function renderWorkout() {
           <p class="eyebrow">${DAY_NAMES[state.activeSession.dayType]}</p>
           <h1>Тренировка</h1>
         </div>
-        <button class="ghost-btn" onclick="navigate('select')">Назад</button>
+        <button class="ghost-btn" onclick="navigate('home')">Свернуть</button>
       </div>
 
       <div class="workout-progress">
-        <div class="workout-progress__bar" style="width:${progress}%"></div>
-        <span class="workout-progress__label">${done.length} / ${available.length}</span>
+        <div class="workout-progress__track">
+          <div class="workout-progress__bar" style="width:${progress}%"></div>
+        </div>
+        <span class="workout-progress__label">${done.length} / ${available.length} упр.</span>
       </div>
-
-      ${renderProgramPlan(state.activeSession.dayType)}
 
       ${available.map((e) => renderExerciseRow(e, sets)).join("")}
 
@@ -834,9 +916,10 @@ async function renderWorkout() {
 }
 
 function renderExerciseRow(exercise, sets) {
-  const count  = sets.filter((s) => s.exerciseId === exercise.id).length;
-  const status = count === 0 ? "не начато" : count < 3 ? "в процессе" : "выполнено";
-  const cls    = count >= 3 ? "good" : count ? "work" : "";
+  const count   = sets.filter((s) => s.exerciseId === exercise.id).length;
+  const planned = getPlannedSets(exercise);
+  const status  = count === 0 ? "не начато" : count < planned ? `${count} / ${planned}` : "выполнено";
+  const cls     = count >= planned ? "good" : count ? "work" : "";
   return `
     <button class="card exercise-card" data-action="open-exercise" data-id="${esc(exercise.id)}">
       <div class="exercise-row">
@@ -909,6 +992,8 @@ async function renderExercise() {
 
       ${tmpl.cautionNote ? `<div class="warn">${esc(tmpl.cautionNote)}</div>` : ""}
 
+      ${renderMuscleGuide(tmpl)}
+
       <article class="card">
         <h2>Подходы${sets.length ? ` · ${sets.length}` : ""}</h2>
         ${sets.length
@@ -953,6 +1038,26 @@ async function renderExercise() {
         </button>
       </article>
     </section>`;
+}
+
+function renderMuscleGuide(tmpl) {
+  const guide = window.exerciseGuide?.get(tmpl.id);
+  if (!guide) return "";
+  return `
+    <details class="card muscle-guide">
+      <summary>
+        <h2>Мышцы и техника</h2>
+        <span class="muted">показать ▾</span>
+      </summary>
+      ${window.exerciseGuide.renderBody(guide.primary, guide.secondary)}
+      <div class="muscle-legend">
+        <span><i class="dot dot--primary"></i> основные</span>
+        <span><i class="dot dot--secondary"></i> вспомогательные</span>
+      </div>
+      <ol class="technique-steps">
+        ${guide.steps.map((step) => `<li>${esc(step)}</li>`).join("")}
+      </ol>
+    </details>`;
 }
 
 function renderCounter(key, value) {
@@ -1023,7 +1128,7 @@ function renderHistoryCard(session, sets) {
           </div>
           <span class="status ${session.completed ? "good" : "warn"}">${session.completed ? "готово" : "черновик"}</span>
         </div>
-        <p class="muted">${sessionSets.length} подходов${names.length ? " · " + names.slice(0, 3).map(esc).join(", ") : ""}</p>
+        <p class="muted">${sessionSets.length} ${plural(sessionSets.length, "подход", "подхода", "подходов")}${names.length ? " · " + names.slice(0, 3).map(esc).join(", ") : ""}</p>
       </button>
     </div>`;
 }
@@ -1119,7 +1224,7 @@ async function renderSessionDetailsUnsafe(sessionId) {
         <p class="muted">Самочувствие: ${esc(session.wellbeing)}</p>
       </article>
       ${sets.length
-        ? sets.map((s) => `<article class="card">${renderSetRowWithName(s)}</article>`).join("")
+        ? renderSetsGroupedByExercise(sets)
         : `<p class="empty">Подходов нет</p>`}
       <button class="primary-btn" data-action="share-session-report" data-id="${session.id}">
         Поделиться отчётом
@@ -1127,10 +1232,18 @@ async function renderSessionDetailsUnsafe(sessionId) {
     </section>`;
 }
 
-function renderSetRowWithName(set) {
-  return `
-    <h3>${esc(getTemplate(set.exerciseId)?.name || set.exerciseId)}</h3>
-    ${renderSetRow(set)}`;
+function renderSetsGroupedByExercise(sets) {
+  const byExercise = new Map();
+  sets.forEach((set) => {
+    const items = byExercise.get(set.exerciseId) || [];
+    items.push(set);
+    byExercise.set(set.exerciseId, items);
+  });
+  return [...byExercise.entries()].map(([exerciseId, items]) => `
+    <article class="card">
+      <h3>${esc(getTemplate(exerciseId)?.name || exerciseId)}</h3>
+      ${items.map(renderSetRow).join("")}
+    </article>`).join("");
 }
 
 // ─── Текстовый отчёт о тренировке (для share sheet / Telegram / Заметок) ─────
@@ -1169,7 +1282,10 @@ function buildSessionReportText(session, sets) {
 
 async function shareSessionReport(sessionId) {
   const session = await store.getSession(sessionId);
-  if (!session) return;
+  if (!session) {
+    window.exportUtils.showToast("Не удалось прочитать тренировку — попробуй ещё раз");
+    return;
+  }
   const sets = await store.getSessionSets(sessionId);
   const text = buildSessionReportText(session, sets);
   await window.exportUtils.shareText(`Тренировка ${formatDate(session.date)}`, text);
@@ -1276,7 +1392,7 @@ async function renderPlan() {
         </div>
         <p class="muted">${esc(profileNote)}. Корректировка идёт по боли, читингу и фактическому выполнению.</p>
       </article>
-      ${items.map(renderPlanDay).join("")}
+      ${items.map((item, index) => renderPlanDay(item, index)).join("")}
     </section>`;
 }
 
@@ -1302,16 +1418,19 @@ function buildUpcomingPlan(planner, weeks) {
   });
 }
 
-function renderPlanDay(item) {
+function renderPlanDay(item, position) {
+  // Ближайшая тренировка развёрнута, остальные — аккордеоном
   return `
-    <article class="card plan-day-card">
-      <div class="metric-row">
-        <div>
-          <p class="label">${formatPlanDate(item.date)}</p>
-          <h2>${DAY_NAMES[item.day]}</h2>
+    <details class="card plan-day-card" ${position === 0 ? "open" : ""}>
+      <summary>
+        <div class="metric-row">
+          <div>
+            <p class="label">${formatPlanDate(item.date)}</p>
+            <h2>${DAY_NAMES[item.day]}</h2>
+          </div>
+          <span class="status ${position === 0 ? "good" : "work"}">${item.wave.label}</span>
         </div>
-        <span class="status ${item.index === 0 ? "good" : "work"}">${item.wave.label}</span>
-      </div>
+      </summary>
       <div class="plan-list">
         ${item.exercises.map(({ tmpl, plan }) => `
           <div class="plan-line">
@@ -1319,7 +1438,7 @@ function renderPlanDay(item) {
             <strong>${esc(plan.text)}</strong>
           </div>`).join("")}
       </div>
-    </article>`;
+    </details>`;
 }
 
 function getUpcomingTrainingDate(offset) {
@@ -1381,40 +1500,43 @@ function renderMeasurementPanel(measurements) {
         <span class="status ${latest ? "good" : "warn"}">${measurements.length}</span>
       </div>
       ${latest ? renderMeasurementSummary(latest, previous) : `<p class="muted">Добавь рост, вес, руки, грудь и талию. Потом приложение будет показывать динамику.</p>`}
-      <div class="profile-grid">
-        <label class="measure-input">
-          <span class="label">Возраст</span>
-          <input
-            type="number"
-            inputmode="numeric"
-            min="10"
-            max="99"
-            data-profile-input="age"
-            value="${esc(state.profile.age)}"
-            placeholder="лет"
-          />
-        </label>
-        <div class="measure-input">
-          <span class="label">Пол</span>
-          <div class="chip-row">
-            <button class="chip ${state.profile.sex === "male" ? "active" : ""}" data-action="set-sex" data-value="male">муж</button>
-            <button class="chip ${state.profile.sex === "female" ? "active" : ""}" data-action="set-sex" data-value="female">жен</button>
+      <details class="measure-form">
+        <summary class="secondary-btn">+ Новый замер</summary>
+        <div class="profile-grid">
+          <label class="measure-input">
+            <span class="label">Возраст</span>
+            <input
+              type="number"
+              inputmode="numeric"
+              min="10"
+              max="99"
+              data-profile-input="age"
+              value="${esc(state.profile.age)}"
+              placeholder="лет"
+            />
+          </label>
+          <div class="measure-input">
+            <span class="label">Пол</span>
+            <div class="chip-row">
+              <button class="chip ${state.profile.sex === "male" ? "active" : ""}" data-action="set-sex" data-value="male">муж</button>
+              <button class="chip ${state.profile.sex === "female" ? "active" : ""}" data-action="set-sex" data-value="female">жен</button>
+            </div>
           </div>
         </div>
-      </div>
-      <p class="muted">${esc(getProfileModifier(state.profile).recovery)}</p>
-      <div class="measure-grid">
-        ${renderMeasureInput("height", "Рост", "см")}
-        ${renderMeasureInput("bodyWeight", "Вес", "кг")}
-        ${renderMeasureInput("arm", "Руки-базуки", "см")}
-        ${renderMeasureInput("chest", "Грудь", "см")}
-        ${renderMeasureInput("waist", "Талия", "см")}
-      </div>
-      <label class="measure-note">
-        <span class="label">Заметка</span>
-        <input data-measure-input="notes" value="${esc(state.measure.notes)}" placeholder="самочувствие, питание, фото..." />
-      </label>
-      <button class="primary-btn" data-action="save-measure">Сохранить замер</button>
+        <p class="muted">${esc(getProfileModifier(state.profile).recovery)}</p>
+        <div class="measure-grid">
+          ${renderMeasureInput("height", "Рост", "см")}
+          ${renderMeasureInput("bodyWeight", "Вес", "кг")}
+          ${renderMeasureInput("arm", "Руки-базуки", "см")}
+          ${renderMeasureInput("chest", "Грудь", "см")}
+          ${renderMeasureInput("waist", "Талия", "см")}
+        </div>
+        <label class="measure-note">
+          <span class="label">Заметка</span>
+          <input data-measure-input="notes" value="${esc(state.measure.notes)}" placeholder="самочувствие, питание, фото..." />
+        </label>
+        <button class="primary-btn" data-action="save-measure">Сохранить замер</button>
+      </details>
     </article>
     ${measurements.length ? `
     <article class="card soft">
@@ -1518,13 +1640,26 @@ async function renderReport() {
       ${renderReportList("⚡ Читинг", cheatEx)}
       <article class="card">
         <h2>Рекомендации</h2>
-        ${templates.map((t) => `
-          <div class="rec-row">
-            <span class="muted">${esc(t.name)}</span>
-            <span>${esc(getRecommendation(t, bases.find((b) => b.exerciseId === t.id), sets))}</span>
-          </div>`).join("")}
+        ${renderRecommendations(bases, sets)}
       </article>
     </section>`;
+}
+
+function renderRecommendations(bases, sets) {
+  // Только упражнения, по которым есть данные (подходы за неделю или база) —
+  // без заблокированных и не начатых, чтобы не было простыни «начать с уровня 1»
+  const relevant = templates.filter((t) => {
+    if (t.blocked) return false;
+    return sets.some((s) => s.exerciseId === t.id) || bases.some((b) => b.exerciseId === t.id);
+  });
+  if (!relevant.length) {
+    return `<p class="muted">Пока нет данных — заверши первую тренировку, и здесь появятся советы по каждому упражнению.</p>`;
+  }
+  return relevant.map((t) => `
+    <div class="rec-row">
+      <span class="muted">${esc(t.name)}</span>
+      <span>${esc(getRecommendation(t, bases.find((b) => b.exerciseId === t.id), sets))}</span>
+    </div>`).join("");
 }
 
 function renderReportList(title, items) {

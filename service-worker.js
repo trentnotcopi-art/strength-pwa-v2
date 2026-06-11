@@ -1,4 +1,4 @@
-const CACHE_NAME = "strength-program-v6";
+const CACHE_NAME = "strength-program-v7";
 const NETWORK_TIMEOUT_MS = 3000;
 const ASSETS = [
   "./",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./app.js",
   "./db.js",
   "./export.js",
+  "./muscles.js",
   "./data/exerciseTemplates.js",
   "./manifest.json",
   "./icons/icon-192.png",

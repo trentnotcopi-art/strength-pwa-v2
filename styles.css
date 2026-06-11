@@ -491,11 +491,17 @@ h3 {
 
 /* Прогресс-бар тренировки */
 .workout-progress {
-  position: relative;
-  height: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workout-progress__track {
+  flex: 1;
+  height: 10px;
   background: var(--line);
   border-radius: 999px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .workout-progress__bar {
@@ -506,10 +512,8 @@ h3 {
 }
 
 .workout-progress__label {
-  position: absolute;
-  right: 0;
-  top: -20px;
-  font-size: 12px;
+  flex-shrink: 0;
+  font-size: 13px;
   font-weight: 800;
   color: var(--muted);
 }
@@ -657,6 +661,165 @@ h3 {
 
 .plan-day-card {
   gap: 12px;
+}
+
+/* План: дни-аккордеоны */
+details.plan-day-card > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+details.plan-day-card > summary::-webkit-details-marker { display: none; }
+
+details.plan-day-card > summary .metric-row::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 14px;
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+}
+
+details.plan-day-card[open] > summary .metric-row::after {
+  transform: rotate(180deg);
+}
+
+details.plan-day-card[open] > summary {
+  margin-bottom: 12px;
+}
+
+/* Прогресс: форма замера за кнопкой */
+.measure-form > summary {
+  display: block;
+  text-align: center;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 14px;
+}
+
+.measure-form > summary::-webkit-details-marker { display: none; }
+
+.measure-form[open] > summary {
+  margin-bottom: 12px;
+}
+
+.measure-form > *:not(summary) {
+  margin-bottom: 10px;
+}
+
+/* Резюме после тренировки */
+.summary-card h1 {
+  margin: 4px 0;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.summary-stats > div {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 12px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.summary-stats strong {
+  font-size: 24px;
+}
+
+/* ─── Мышцы и техника ──────────────────────────────────────────────────────── */
+.muscle-guide > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.muscle-guide > summary::-webkit-details-marker { display: none; }
+
+.muscle-guide[open] > summary .muted { visibility: hidden; }
+
+.muscle-guide[open] > summary {
+  margin-bottom: 12px;
+}
+
+.muscle-svg {
+  display: block;
+  width: min(100%, 320px);
+  margin: 0 auto;
+}
+
+.muscle-svg .b > * {
+  fill: #232a31;
+}
+
+.muscle-svg .m {
+  fill: #323b44;
+  transition: fill 0.3s ease;
+}
+
+.muscle-svg .m.primary {
+  fill: var(--accent);
+  animation: muscle-pulse 1.6s ease-in-out infinite;
+}
+
+.muscle-svg .m.secondary {
+  fill: rgba(109, 214, 141, 0.35);
+}
+
+.muscle-svg .t {
+  fill: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@keyframes muscle-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+.muscle-legend {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.muscle-legend .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.dot--primary   { background: var(--accent); }
+.dot--secondary { background: rgba(109, 214, 141, 0.35); }
+
+.technique-steps {
+  margin: 10px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.technique-steps li::marker {
+  color: var(--accent);
+  font-weight: 800;
 }
 
 .planner-card {

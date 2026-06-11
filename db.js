@@ -1,7 +1,10 @@
 const DB_NAME = "StrengthProgram2026";
 const DB_VERSION = 2;
 const useLocalStore = location.protocol === "file:" || !window.indexedDB;
-const IDB_TIMEOUT_MS = 1200;
+// Таймаут щедрый: при коротком (1.2с) IndexedDB под нагрузкой (например, во время
+// установки service worker) не успевал ответить, и чтение молча падало в пустой
+// localStorage — данные «исчезали» до перезагрузки.
+const IDB_TIMEOUT_MS = 5000;
 
 function readLocalStore(name) {
   return JSON.parse(localStorage.getItem(`${DB_NAME}:${name}`) || "[]");
