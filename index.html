@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#101316">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Программа">
+    <!-- Safari PWA icon (manifest data: URI не работает на iOS) -->
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <title>Программа</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <script>
+      // Безопасный обработчик ошибок — без innerHTML из event.message
+      window.addEventListener("error", function (event) {
+        var app = document.querySelector("#app");
+        if (!app) return;
+        var msg = document.createElement("p");
+        msg.className = "muted";
+        msg.textContent = event.message; // textContent — не XSS
+        app.innerHTML = "";
+        var section = document.createElement("section");
+        section.className = "screen";
+        var card = document.createElement("article");
+        card.className = "card";
+        var eyebrow = document.createElement("p");
+        eyebrow.className = "eyebrow";
+        eyebrow.textContent = "Ошибка";
+        var h1 = document.createElement("h1");
+        h1.textContent = "Скрипт не запустился";
+        card.appendChild(eyebrow);
+        card.appendChild(h1);
+        card.appendChild(msg);
+        section.appendChild(card);
+        app.appendChild(section);
+      });
+    </script>
+
+    <main id="app" class="app-shell">
+      <section class="screen">
+        <article class="card">
+          <p class="eyebrow">Loading</p>
+          <h1>Программа</h1>
+          <p class="muted">Если экран не загрузился, нажми Ctrl+F5.</p>
+        </article>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Основная навигация">
+      <button class="nav-btn active" data-route="home">Домой</button>
+      <button class="nav-btn" data-route="history">История</button>
+      <button class="nav-btn" data-route="plan">План</button>
+      <button class="nav-btn" data-route="progress">Прогресс</button>
+      <button class="nav-btn" data-route="report">Отчёт</button>
+    </nav>
+
+    <script src="data/exerciseTemplates.js"></script>
+    <script src="db.js"></script>
+    <script src="export.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
