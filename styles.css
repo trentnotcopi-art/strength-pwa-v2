@@ -753,38 +753,60 @@ details.plan-day-card[open] > summary {
 }
 
 .muscle-svg {
-  display: block;
-  width: min(100%, 320px);
-  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
 }
 
-.muscle-svg .b > * {
-  fill: #232a31;
+.muscle-fig {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  min-width: 0;
 }
 
+.muscle-fig svg {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+}
+
+.muscle-fig figcaption {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Контур тела */
+.muscle-svg .body-outline {
+  fill: #283037;
+  stroke: #3b454e;
+  stroke-width: 2;
+}
+
+/* Мышцы по умолчанию — приглушённый рельеф */
 .muscle-svg .m {
-  fill: #323b44;
+  fill: #39434d;
+  stroke: #232a31;
+  stroke-width: 1;
   transition: fill 0.3s ease;
 }
 
+/* Вспомогательные — мягкий зелёный */
+.muscle-svg .m.secondary {
+  fill: rgba(109, 214, 141, 0.4);
+}
+
+/* Основные — насыщенный зелёный с пульсом */
 .muscle-svg .m.primary {
   fill: var(--accent);
   animation: muscle-pulse 1.6s ease-in-out infinite;
 }
 
-.muscle-svg .m.secondary {
-  fill: rgba(109, 214, 141, 0.35);
-}
-
-.muscle-svg .t {
-  fill: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-}
-
 @keyframes muscle-pulse {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.55; }
+  50%      { opacity: 0.6; }
 }
 
 .muscle-legend {

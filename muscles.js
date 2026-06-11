@@ -2,70 +2,58 @@
 // Всё инлайново (SVG-строки), работает офлайн, без внешних ресурсов.
 
 (function () {
-  // Ключи мышц: chest, front-delts, side-delts, rear-delts, traps, lats,
-  // lower-back, biceps, triceps, forearms, abs, quads, hamstrings, glutes, calves
+  // Ключи мышц в GUIDE: chest, front-delts, side-delts, rear-delts, traps, lats,
+  // lower-back, biceps, triceps, forearms, abs, quads, hamstrings, glutes, calves.
+  // Маппинг на анатомические slug'и из body-paths.js (react-native-body-highlighter):
+  const KEY_TO_SLUG = {
+    chest: ["chest"],
+    "front-delts": ["deltoids"],
+    "side-delts": ["deltoids"],
+    "rear-delts": ["deltoids"],
+    traps: ["trapezius"],
+    lats: ["upper-back"],
+    "lower-back": ["lower-back"],
+    biceps: ["biceps"],
+    triceps: ["triceps"],
+    forearms: ["forearm"],
+    abs: ["abs"],
+    quads: ["quadriceps"],
+    hamstrings: ["hamstring"],
+    glutes: ["gluteal"],
+    calves: ["calves"],
+  };
 
-  // Контуры тела (нейтральные, не подсвечиваются)
-  const BODY = [
-    // спереди
-    `<circle cx="60" cy="16" r="10"/>`,
-    `<rect x="55" y="25" width="10" height="9" rx="3"/>`,
-    `<path d="M42 33 L78 33 L74 102 L46 102 Z"/>`,
-    `<rect x="46" y="100" width="28" height="10" rx="4"/>`,
-    `<ellipse cx="52" cy="172" rx="5" ry="16"/>`,
-    `<ellipse cx="68" cy="172" rx="5" ry="16"/>`,
-    // сзади
-    `<circle cx="160" cy="16" r="10"/>`,
-    `<rect x="155" y="25" width="10" height="9" rx="3"/>`,
-    `<path d="M142 33 L178 33 L174 102 L146 102 Z"/>`,
-  ];
+  function slugsFor(keys) {
+    const set = new Set();
+    keys.forEach((k) => (KEY_TO_SLUG[k] || []).forEach((s) => set.add(s)));
+    return set;
+  }
 
-  // Мышечные зоны: [keys, svg-шаблон] — %CLS% заменяется на классы
-  const MUSCLES = [
-    // ── спереди ──
-    [["front-delts", "side-delts"], `<circle cx="38" cy="41" r="8" class="m %CLS%"/>`],
-    [["front-delts", "side-delts"], `<circle cx="82" cy="41" r="8" class="m %CLS%"/>`],
-    [["chest"], `<ellipse cx="49" cy="58" rx="10.5" ry="8.5" class="m %CLS%"/>`],
-    [["chest"], `<ellipse cx="71" cy="58" rx="10.5" ry="8.5" class="m %CLS%"/>`],
-    [["biceps"], `<ellipse cx="33" cy="67" rx="5.5" ry="10" class="m %CLS%"/>`],
-    [["biceps"], `<ellipse cx="87" cy="67" rx="5.5" ry="10" class="m %CLS%"/>`],
-    [["forearms"], `<ellipse cx="29" cy="91" rx="4.5" ry="11" class="m %CLS%"/>`],
-    [["forearms"], `<ellipse cx="91" cy="91" rx="4.5" ry="11" class="m %CLS%"/>`],
-    [["abs"], `<rect x="51" y="69" width="18" height="27" rx="6" class="m %CLS%"/>`],
-    [["quads"], `<ellipse cx="52" cy="130" rx="7.5" ry="22" class="m %CLS%"/>`],
-    [["quads"], `<ellipse cx="68" cy="130" rx="7.5" ry="22" class="m %CLS%"/>`],
-    // ── сзади ──
-    [["traps"], `<path d="M146 34 L174 34 L167 50 L153 50 Z" class="m %CLS%"/>`],
-    [["rear-delts"], `<circle cx="138" cy="41" r="8" class="m %CLS%"/>`],
-    [["rear-delts"], `<circle cx="182" cy="41" r="8" class="m %CLS%"/>`],
-    [["lats"], `<path d="M148 52 C141 62 143 80 153 88 L158 58 Z" class="m %CLS%"/>`],
-    [["lats"], `<path d="M172 52 C179 62 177 80 167 88 L162 58 Z" class="m %CLS%"/>`],
-    [["lower-back"], `<rect x="153" y="80" width="14" height="16" rx="4" class="m %CLS%"/>`],
-    [["triceps"], `<ellipse cx="133" cy="67" rx="5.5" ry="10" class="m %CLS%"/>`],
-    [["triceps"], `<ellipse cx="187" cy="67" rx="5.5" ry="10" class="m %CLS%"/>`],
-    [["forearms"], `<ellipse cx="129" cy="91" rx="4.5" ry="11" class="m %CLS%"/>`],
-    [["forearms"], `<ellipse cx="191" cy="91" rx="4.5" ry="11" class="m %CLS%"/>`],
-    [["glutes"], `<ellipse cx="152" cy="108" rx="8" ry="9" class="m %CLS%"/>`],
-    [["glutes"], `<ellipse cx="168" cy="108" rx="8" ry="9" class="m %CLS%"/>`],
-    [["hamstrings"], `<ellipse cx="152" cy="136" rx="7.5" ry="20" class="m %CLS%"/>`],
-    [["hamstrings"], `<ellipse cx="168" cy="136" rx="7.5" ry="20" class="m %CLS%"/>`],
-    [["calves"], `<ellipse cx="152" cy="174" rx="5.5" ry="14" class="m %CLS%"/>`],
-    [["calves"], `<ellipse cx="168" cy="174" rx="5.5" ry="14" class="m %CLS%"/>`],
-  ];
+  function renderSide(side, label, primarySlugs, secondarySlugs) {
+    const data = window.bodyPaths?.[side];
+    if (!data) return "";
+    const muscleLayers = Object.entries(data.parts).map(([slug, paths]) => {
+      const cls = primarySlugs.has(slug) ? "primary" : secondarySlugs.has(slug) ? "secondary" : "";
+      return paths.map((d) => `<path d="${d}" class="m ${cls}"/>`).join("");
+    }).join("");
+    return `
+      <figure class="muscle-fig">
+        <svg viewBox="${data.viewBox}" role="img" aria-label="Мышцы ${label}">
+          <path d="${data.outline}" class="body-outline"/>
+          ${muscleLayers}
+        </svg>
+        <figcaption>${label}</figcaption>
+      </figure>`;
+  }
 
   function renderBody(primary = [], secondary = []) {
-    const cls = (keys) => {
-      if (keys.some((k) => primary.includes(k))) return "primary";
-      if (keys.some((k) => secondary.includes(k))) return "secondary";
-      return "";
-    };
+    const primarySlugs = slugsFor(primary);
+    const secondarySlugs = slugsFor(secondary);
     return `
-      <svg class="muscle-svg" viewBox="0 0 220 196" role="img" aria-label="Схема работающих мышц">
-        <g class="b">${BODY.join("")}</g>
-        ${MUSCLES.map(([keys, tpl]) => tpl.replace("%CLS%", cls(keys))).join("")}
-        <text x="60" y="194" text-anchor="middle" class="t">спереди</text>
-        <text x="160" y="194" text-anchor="middle" class="t">сзади</text>
-      </svg>`;
+      <div class="muscle-svg">
+        ${renderSide("front", "спереди", primarySlugs, secondarySlugs)}
+        ${renderSide("back", "сзади", primarySlugs, secondarySlugs)}
+      </div>`;
   }
 
   // Какие мышцы работают и как делать — по id упражнения
